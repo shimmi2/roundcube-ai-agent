@@ -1,0 +1,42 @@
+<roundcube:include file="includes/layout.html" />
+<roundcube:include file="includes/menu.html" />
+
+<h1 class="voice"><roundcube:label name="ai_agent.agent" /></h1>
+
+<!-- conversation list -->
+<div id="layout-sidebar" class="listbox" role="navigation" aria-labelledby="aria-label-aiagent-list">
+	<div class="header">
+		<a class="button icon task-menu-button" href="#menu"><span class="inner"><roundcube:label name="menu" /></span></a>
+		<span id="aria-label-aiagent-list" class="header-title"><roundcube:label name="ai_agent.conversations" /></span>
+		<a class="button icon back-content-button" href="#content" data-hidden="big"><span class="inner"><roundcube:label name="back" /></span></a>
+	</div>
+	<div class="scroller">
+		<ul id="aiagent-list" class="listing ai-agent-list" role="listbox"></ul>
+	</div>
+</div>
+
+<!-- conversation window -->
+<div id="layout-content" class="selected" role="main">
+	<div class="header">
+		<a class="button icon back-sidebar-button" href="#sidebar"><span class="inner"><roundcube:label name="ai_agent.conversations" /></span></a>
+		<span id="aiagent-title" class="header-title"><roundcube:label name="ai_agent.newconv_title" /></span>
+		<div class="toolbar menu" role="toolbar">
+			<roundcube:button command="plugin.ai_agent-new" type="link" class="create disabled" classAct="create"
+				label="ai_agent.newconv" title="ai_agent.newconv_title" innerClass="inner" />
+		</div>
+	</div>
+	<div id="aiagent-messages" class="scroller ai-agent-messages" aria-live="polite"></div>
+	<div class="ai-agent-footer">
+		<form id="aiagent-form" autocomplete="off">
+			<div class="input-group">
+				<textarea id="aiagent-input" class="form-control" rows="2"></textarea>
+				<span class="input-group-append">
+					<button type="submit" id="aiagent-send" class="btn btn-primary"></button>
+				</span>
+			</div>
+			<div id="aiagent-status" class="hint"></div>
+		</form>
+	</div>
+</div>
+
+<roundcube:include file="includes/footer.html" />

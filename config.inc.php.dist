@@ -1,0 +1,94 @@
+<?php
+
+/*
+ * AI agent — plugin configuration. Copy to config.inc.php and edit.
+ *
+ * The plugin talks neither to a database nor to any daemon, only to a data
+ * API over HTTPS. To use the plugin with your own backend, implement this
+ * API (below is all the plugin needs) — the plugin reads nothing else.
+ *
+ * ---------------------------------------------------------------------------
+ *  DATA API (ai_agent_api_url)
+ * ---------------------------------------------------------------------------
+ *  One base URL, the operation in a parameter: GET|POST <api>?fn=<operation>&…
+ *  POST as application/x-www-form-urlencoded. Responses are JSON; an error
+ *  is an HTTP code and {"error": "<text for the user>", "code": N}:
+ *    400 invalid input, 401 authentication, 403 permission, 404 not found,
+ *    409 conflict, 429 too many attempts / busy.
+ *  The token always goes in the header Authorization: Bearer <token>,
+ *  never in the URL.
+ *
+ *  do_login        POST login, password, persist=0
+ *                  → {session, expires_in, mu_id, login, address}
+ *                  The plugin sends the username and password of the
+ *                  Roundcube login (the same as for IMAP). session = token,
+ *                  valid for this mailbox only; once it expires the API
+ *                  returns 401 and the plugin logs in again.
+ *  do_logout       POST (token) → {ok}; called on Roundcube logout.
+ *
+ *  mail_get_mailbox  GET → {mailbox: {address, login, fullname, quota,
+ *                    quota_used_bytes, quota_used_messages, ai: {…}}}
+ *     ai.domain_enabled   the AI service is available on the domain (purchased)
+ *     ai.enable           AI enabled for the mailbox (set by the administrator,
+ *                         read-only for the user)
+ *     ai.enable_incoming, ai.enable_summary_daily, ai.enable_summary_weekly   0/1
+ *     ai.instructions.<incoming|summary_daily|summary_weekly> = {value, default}
+ *                         empty value = the default applies
+ *     ai.memory           the assistant's memory (text)
+ *  mail_store_mailbox  POST only the fields to store:
+ *     fullname, ai_enable_incoming, ai_enable_summary_daily,
+ *     ai_enable_summary_weekly (0/1), ai_incoming_instructions,
+ *     ai_summary_daily_instructions, ai_summary_weekly_instructions
+ *     (empty = default instructions), ai_memory
+ *     → {mailbox} after storing; a field the user may not change → 403
+ *
+ *  ai_list_tasks   GET type (live = chat conversations), limit, offset
+ *                  → {total, tasks[]}: at_id, type, state (new, running, done,
+ *                  skipped, error), created, started, finished, mailbox,
+ *                  tokens_in, tokens_out, result (shortened), error;
+ *                  for live also title (start of the first question)
+ *  ai_get_conversation  GET at_id → {conversation: {at_id, state, created,
+ *                  turns[]: {role: user|assistant, content}}}
+ *  ai_usage_months GET months (1–120) → {months[]: {month: "YYYY-MM",
+ *                  live, incoming, summary, total: {tasks, tokens_in, tokens_out}}}
+ *                  (including deleted tasks)
+ *
+ *  Task types: incoming (sorting of a delivered message), summary_daily,
+ *  summary_weekly (reports sent to the mailbox), live (chat). mailbox in a
+ *  task is the IMAP folder the message was in.
+ *
+ * ---------------------------------------------------------------------------
+ *  CHAT (ai_agent_chat_url) — OpenAI Chat Completions with a session
+ * ---------------------------------------------------------------------------
+ *  POST <chat>chat/completions, body {model, stream: true, messages[]},
+ *  token in the header Authorization: Bearer (the same as for the data API).
+ *  The browser calls it directly, so the API has to allow CORS for the
+ *  webmail origin (Access-Control-Allow-Origin; allowed headers
+ *  Authorization, Content-Type, X-Conversation-Id; exposed headers
+ *  X-Conversation-Id, Retry-After). The data API calls listed above for
+ *  the chat (ai_list_tasks, ai_get_conversation) come from the browser too.
+ *  The token travels in a header and no cookies are used, so
+ *  "Access-Control-Allow-Origin: *" is safe.
+ *
+ *  Session: the conversation lives on the server. The first response
+ *  returns the header X-Conversation-Id (and the field conversation_id in
+ *  the chunks); the client sends it with the following requests and the
+ *  server then takes only the last message from messages, it keeps the
+ *  history itself. No header = a new conversation.
+ *  Stream (SSE): while the agent works only ": ping" comments arrive (it
+ *  may take minutes), the answer comes at the end as delta.content in
+ *  chunks, then "data: [DONE]". An error in the middle of the stream:
+ *  data: {"error": {"message"}}.
+ *  Codes: 403 AI not enabled on the domain or mailbox, 409 the conversation
+ *  is being answered right now, 429 + Retry-After the agent is busy.
+ *  The answer is Markdown; the plugin renders it with marked and DOMPurify.
+ */
+
+// Base URL of the data API (with a trailing slash), e.g. 'https://api.example.com/'.
+$config['ai_agent_api_url'] = '';
+
+// Base URL of the chat (OpenAI compatible). null = <ai_agent_api_url>v1/
+$config['ai_agent_chat_url'] = null;
+
+// Model name the chat sends in the request.
+$config['ai_agent_model'] = 'mail-ai';

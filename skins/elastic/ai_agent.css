@@ -1,0 +1,64 @@
+/* AI agent — Elastic. Icons come from the skin's Icons font (Font Awesome 5 solid). */
+
+/* main menu (ui.js adds class aiagent from button-aiagent) */
+#taskmenu a.aiagent:before { content: "\f544"; }   /* robot */
+
+/* Settings → AI and its subpages */
+.listing.iconized li.ai_agent > a:before { content: "\f544"; }                /* robot */
+.listing.iconized li.ai_agent-instructions > a:before { content: "\f0d0"; }   /* wand */
+.listing.iconized li.ai_agent-log > a:before { content: "\f03a"; }            /* list */
+
+/* ---- chat ---------------------------------------------------------- */
+#layout-content .ai-agent-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: .5rem 1rem;
+}
+.ai-agent-footer {
+    padding: .5rem 1rem;
+    border-top: 1px solid #e4e4e4;
+}
+.ai-agent-footer textarea { resize: vertical; }
+.ai-agent-footer .hint { min-height: 1.4em; margin-top: .25rem; }
+
+.ai-agent-msg { margin: .75rem 0; max-width: 85%; }
+.ai-agent-msg.user { margin-left: auto; }
+.ai-agent-msg .meta { font-size: .8rem; color: #737677; margin-bottom: .15rem; }
+.ai-agent-msg.user .meta { text-align: right; }
+.ai-agent-msg .text {
+    padding: .5rem .75rem;
+    border-radius: .5rem;
+    background: #f4f4f4;
+    overflow-wrap: anywhere;
+}
+.ai-agent-msg.user .text { background: #e1f3fc; white-space: pre-wrap; }
+.ai-agent-intro { color: #737677; padding: 1rem 0; }
+.ai-agent-error { margin: .5rem 0; }
+
+/* Markdown in the answer */
+.ai-agent-md > :first-child { margin-top: 0; }
+.ai-agent-md > :last-child { margin-bottom: 0; }
+.ai-agent-md pre { white-space: pre-wrap; }
+.ai-agent-md table { font-size: .875em; border-collapse: collapse; margin: .5rem 0; }
+.ai-agent-md td, .ai-agent-md th { padding: .15rem .4rem; border: 1px solid #d4dbde; }
+
+/* conversation list */
+.ai-agent-list li a { display: block; padding: .5rem 1rem; line-height: 1.3; }
+.ai-agent-list li .title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-agent-list li .info { font-size: .8rem; opacity: .75; }
+.ai-agent-list li .info .badge { margin-left: .4rem; }
+.ai-agent-list li.empty { padding: .75rem 1rem; color: #737677; }
+
+/* ---- AI log ------------------------------------------------------ */
+.ai-agent-log { font-size: .875rem; }
+.ai-agent-log .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-agent-log .nowrap { white-space: nowrap; }
+.ai-agent-log .result { color: #737677; min-width: 20rem; }
+
+/* Elastic dark mode */
+html.dark-mode .ai-agent-footer { border-color: #3c4249; }
+html.dark-mode .ai-agent-msg .text { background: #2f353b; }
+html.dark-mode .ai-agent-msg.user .text { background: #1d3d4f; }
+html.dark-mode .ai-agent-md td, html.dark-mode .ai-agent-md th { border-color: #4b5259; }
+html.dark-mode .ai-agent-msg .meta, html.dark-mode .ai-agent-intro,
+html.dark-mode .ai-agent-list li.empty, html.dark-mode .ai-agent-log .result { color: #a3a7ab; }

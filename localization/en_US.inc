@@ -1,0 +1,93 @@
+<?php
+
+$labels = [];
+
+$labels['agent'] = 'AI agent';
+$labels['instructions'] = 'AI agent instructions';
+$labels['log'] = 'AI log';
+$labels['settings_ai'] = 'AI';
+
+$labels['apierror'] = 'The AI service returned an error (HTTP $code).';
+$labels['apidown'] = 'The AI service is unavailable now, please try again later.';
+
+$labels['notpaid'] = 'Mailbox <b>$address</b> is on a domain without the AI mail service.';
+$labels['notpaid_more'] = 'AI mail is a paid service which is not active here and has to be ordered. It sorts incoming mail, sends daily and weekly summaries and answers questions about your mail.';
+$labels['notactive'] = 'The domain has the AI service, but it is not active for mailbox <b>$address</b> yet.';
+$labels['notactive_more'] = 'The service is activated for the mailbox by the administrator from the customer admin account — it is paid, so mailboxes do not get it automatically.';
+
+$labels['mailbox'] = 'Mailbox';
+$labels['fullname'] = 'Sender name';
+$labels['fullname_hint'] = 'Shown in the From field of messages the assistant sends on your behalf (e.g. the daily report).';
+$labels['login'] = 'Login';
+$labels['password_hint'] = 'Change the password in Settings → Password.';
+$labels['used'] = 'Used';
+$labels['messages'] = 'Messages';
+$labels['ai'] = 'AI mail';
+$labels['pipeline'] = 'AI works only after filters. An incoming message passes the system antispam (it only marks it), then your filters (Settings → Filters), and is delivered to a folder. AI processes it usually within seconds after delivery; when the servers are busy, in queue order.';
+$labels['enable'] = 'AI enabled for the mailbox';
+$labels['enable_hint'] = 'Activated by the administrator from the customer admin account (paid service). Without it there is no sorting, no reports and no chat.';
+$labels['type_incoming'] = 'AI sorting of incoming mail';
+$labels['type_summary_daily'] = 'AI daily report';
+$labels['type_summary_weekly'] = 'AI weekly report';
+$labels['logtype_incoming'] = 'sorting';
+$labels['logtype_summary_daily'] = 'daily report';
+$labels['logtype_summary_weekly'] = 'weekly report';
+$labels['logtype_live'] = 'chat';
+$labels['default_task'] = 'default task';
+$labels['default_hint'] = 'Deleted or unchanged text = default task.';
+$labels['memory'] = 'AI memory';
+$labels['memory_empty'] = 'Memory is empty.';
+$labels['memory_hint'] = 'What the assistant remembered about you and your mail. You can correct or delete it.';
+
+$labels['log_intro'] = '$n in the log. Results are shortened; monthly sums include deleted tasks.';
+$labels['log_empty'] = 'The mailbox has no AI tasks yet.';
+$labels['log_deleted'] = 'Tasks of this month were deleted.';
+$labels['log_sum'] = 'Total $n, tokens $in / $out (input / output)';
+$labels['col_when'] = 'when';
+$labels['col_type'] = 'type';
+$labels['col_state'] = 'state';
+$labels['col_folder'] = 'folder';
+$labels['col_in'] = 'tokens in';
+$labels['col_out'] = 'out';
+$labels['col_result'] = 'result';
+$labels['state_done'] = 'done';
+$labels['state_error'] = 'error';
+$labels['state_skipped'] = 'skipped';
+$labels['state_new'] = 'waiting';
+$labels['state_running'] = 'running';
+$labels['sum_incoming'] = 'sorting';
+$labels['sum_summary'] = 'reports';
+$labels['sum_live'] = 'chat';
+$labels['tasks_1'] = '$n task';
+$labels['tasks_2'] = '$n tasks';
+$labels['tasks_5'] = '$n tasks';
+$labels['newer'] = 'Newer';
+$labels['older'] = 'Older tasks';
+
+$labels['conversations'] = 'Conversations';
+$labels['newconv'] = 'New';
+$labels['newconv_title'] = 'New conversation';
+$labels['you'] = 'You';
+$labels['assistant'] = 'AI assistant';
+$labels['send'] = 'Send';
+$labels['stop'] = 'Stop';
+$labels['placeholder'] = 'Ask about your mail… (Enter sends, Shift+Enter new line)';
+$labels['placeholder_ro'] = 'Older conversation is read-only — start a new one (New button).';
+$labels['intro'] = 'Ask anything about your mail — e.g. "what important came this week?" or "find the invoice from my internet provider and summarize it". The assistant searches and reads your mail; the answer may take several minutes.';
+$labels['readonly_note'] = 'History of this older conversation was not stored, it cannot be shown or continued. Start a new conversation with the New button.';
+$labels['running_note'] = 'The assistant is answering this conversation right now.';
+$labels['working'] = 'Assistant is working…';
+$labels['loading_conv'] = 'Loading conversation…';
+$labels['loading'] = 'Loading…';
+$labels['list_empty'] = 'No conversations yet.';
+$labels['list_error'] = 'Could not load the list.';
+$labels['conv_error'] = 'Could not load the conversation.';
+$labels['untitled'] = '(older conversation)';
+$labels['tokens_title'] = 'tokens in / out';
+$labels['stopped'] = 'Stopped. The assistant did not finish the answer.';
+$labels['conn_lost'] = 'Connection to the assistant was lost.';
+$labels['empty_answer'] = 'The assistant returned an empty answer.';
+$labels['no_answer'] = 'The assistant did not answer.';
+$labels['retry_after'] = '(try again in $s s)';
+$labels['http_error'] = 'HTTP error $code';
+$labels['min'] = 'min';
