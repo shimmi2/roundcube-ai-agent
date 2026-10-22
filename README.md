@@ -9,12 +9,21 @@ incoming mail and daily or weekly reports, write their own instructions
 for each agent, edit what the assistant remembers about them and see a
 log of everything the AI did, including token usage.
 
-![Chat with the AI agent](screenshots/chat.png)
+![Chat with the AI agent](screenshots/chat.jpg)
+
+> **Sorry, the screenshots are partly in Czech.** They come from a real
+> mailbox in daily use, so the mail, the instructions and the memory are
+> Czech. In the chat above the interface is Czech too. The chat also shows
+> why that does not matter: the questions are in English, the mail is in
+> Czech, and the agent finds the mail, reads the attachments and answers
+> in English, translating where needed.
 
 ## Built for SSHosting, made for anyone
 
-The plugin was created for [SSHosting](https://www.sshosting.cz), where it
-runs in production on top of an AI agent that works with real mailboxes.
+The plugin was written by [Tomáš Šimek](https://simek.info) for
+[SSHosting](https://sshosting.cz). It runs in production at
+[SSHosting](https://sshosting.cz) and [STARNET](https://starnet.cz), on top
+of an AI agent that works with real mailboxes.
 It is not tied to that backend, though. The design follows today's common
 patterns, and on the wire it is a combination of two simple things:
 
@@ -49,7 +58,7 @@ else, with no database access and no daemons.
 
 | AI agent instructions | AI log |
 |---|---|
-| ![AI agent instructions](screenshots/instructions.png) | ![AI log](screenshots/log.png) |
+| ![AI agent instructions](screenshots/instructions.jpg) | ![AI log](screenshots/log.jpg) |
 
 ## How it works
 
@@ -136,6 +145,8 @@ them in `localization/`.
 - Only the Elastic skin is supported.
 
 ## License
+
+Author: [Tomáš Šimek](https://simek.info).
 
 GPL-3.0-or-later, see [LICENSE](LICENSE). For the bundled libraries see
 [`js/README.md`](js/README.md).
