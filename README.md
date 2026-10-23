@@ -1,6 +1,7 @@
-# AI agent for Roundcube
+# AI agent plugin for Roundcube
 
-**Chat with an AI assistant that knows your mailbox — right inside Roundcube.**
+**A Roundcube plugin for an AI agent working over your mailbox: chat with
+it, give it instructions and see what it did, right inside Roundcube.**
 
 Ask *"what important came this week?"* or *"find the last invoice from my
 provider and summarize it"*. The agent searches and reads your mail and
@@ -8,6 +9,11 @@ answers in Markdown. Besides the chat, users can switch on AI sorting of
 incoming mail and daily or weekly reports, write their own instructions
 for each agent, edit what the assistant remembers about them and see a
 log of everything the AI did, including token usage.
+
+All the work happens **on the server**. Incoming mail is sorted when it
+is delivered, whether or not any client is running: webmail closed, a phone
+app, a desktop client or no client at all. Reports are sent the same way.
+The plugin is only the window into it: chat, settings and the log.
 
 ![Chat with the AI agent](screenshots/chat.jpg)
 
@@ -39,6 +45,16 @@ Both are fully specified in [`config.inc.php.dist`](config.inc.php.dist).
 Implement them over any agent you like: an LLM with IMAP tools, a local
 model, a ticketing system or anything else. The plugin talks to nothing
 else, with no database access and no daemons.
+
+### Our backend
+
+At SSHosting and STARNET the stack behind the plugin is Exim and Dovecot for
+mail, **Stanban Agent** as the AI agent and an API built on the
+[**Waggle**](https://github.com/shimmi2/waggle) framework. The admin portal,
+where administrators enable AI for mailboxes, is written on Waggle too.
+Waggle and Stanban Agent are my own technologies, written for the AI era.
+If you are building an agent for your plugin backend, I am open to
+consultations on the implementation: [simek.info](https://simek.info).
 
 ## Features
 
@@ -111,7 +127,7 @@ Then add `'ai_agent'` to `$config['plugins']` in `config/config.inc.php`.
 |---|---|
 | `ai_agent_api_url` | base URL of the data API, e.g. `https://api.example.com/` (required) |
 | `ai_agent_chat_url` | base URL of the OpenAI-compatible chat; `null` = `<api_url>v1/` |
-| `ai_agent_model` | model name sent in chat requests (default `mail-ai`) |
+| `ai_agent_model` | model name sent in chat requests (default `mail-ai`); our agent ignores it |
 
 ## Implementing the backend
 
@@ -137,6 +153,15 @@ them in `localization/`.
 - Roundcube 1.7 with the Elastic skin (developed and tested on 1.7.5)
 - PHP 8.1 or newer
 - an HTTPS backend implementing the API above
+
+Two JavaScript libraries are used for the chat, and both are bundled in
+`js/`. In the old terms they are statically linked, so there is nothing to
+install and no CDN to load them from:
+
+- [marked](https://github.com/markedjs/marked) 12.0.2 (MIT) renders
+  Markdown;
+- [DOMPurify](https://github.com/cure53/DOMPurify) 3.4.17 (Apache-2.0 or
+  MPL-2.0) sanitizes the answers.
 
 ## Known limitations
 

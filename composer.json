@@ -1,7 +1,7 @@
 {
     "name": "shimmi2/ai-agent",
     "type": "roundcube-plugin",
-    "description": "AI assistant over your mailbox for Roundcube: chat, agent instructions and a log of its work. Talks only to a small REST API and an OpenAI-compatible chat endpoint.",
+    "description": "Roundcube plugin for an AI agent over your mailbox: chat with the agent, its instructions and a log of its work. Server-side agent behind a small REST API and an OpenAI-compatible chat endpoint.",
     "keywords": ["roundcube", "plugin", "ai", "llm", "openai", "agent", "email", "assistant"],
     "homepage": "https://github.com/shimmi2/roundcube-ai-agent",
     "license": "GPL-3.0-or-later",
