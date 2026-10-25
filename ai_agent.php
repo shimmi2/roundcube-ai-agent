@@ -637,7 +637,12 @@ class ai_agent extends rcube_plugin
         if (!array_key_exists("{$type}_next_run", $ai)) {
             return '';
         }
-        $fmt = fn ($d) => rcube::Q($this->rc->format_date($d, 'D j. n. Y H:i'));
+        // as given by the API, without time zone conversion (like the log):
+        // the API sends the server's local time without a zone
+        $fmt = function ($d) {
+            $ts = strtotime((string) $d);
+            return rcube::Q($this->rc->gettext(strtolower(date('D', $ts))) . ' ' . date('j. n. Y H:i', $ts));
+        };
         $parts = [];
         if (!empty($ai['enable_' . $type])) {
             $parts[] = rcube::Q($this->gettext('next_run')) . ': '
