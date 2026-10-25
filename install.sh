@@ -15,7 +15,7 @@ SRC=$(cd "$(dirname "$0")" && pwd)
 DST=$RC/plugins/ai_agent
 
 mkdir -p "$DST"
-for f in ai_agent.php ai_agent.js settings.js composer.json config.inc.php.dist; do
+for f in ai_agent.php ai_agent.js mail.js settings.js composer.json config.inc.php.dist; do
     install -m 0644 "$SRC/$f" "$DST/$f"
 done
 for d in localization skins js; do

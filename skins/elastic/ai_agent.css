@@ -20,6 +20,14 @@
 }
 .ai-agent-footer textarea { resize: vertical; }
 .ai-agent-footer .hint { min-height: 1.4em; margin-top: .25rem; }
+.ai-agent-frame { display: flex; flex-direction: column; height: 100vh; }
+.ai-agent-frame .ai-agent-messages { flex: 1; overflow-y: auto; padding: .5rem 1rem; }
+.ai-agent-ref { font-size: .85rem; color: #737677; margin: .5rem 0; }
+
+/* mail toolbar: "AI write", "AI reply" */
+.menu a.ai-write:before { content: "\f303"; }   /* pen */
+.menu a.ai-reply:before { content: "\f3e5"; }   /* reply */
+.ai-agent-dialog iframe { width: 100%; height: 100%; border: 0; }
 
 .ai-agent-msg { margin: .75rem 0; max-width: 85%; }
 .ai-agent-msg.user { margin-left: auto; }

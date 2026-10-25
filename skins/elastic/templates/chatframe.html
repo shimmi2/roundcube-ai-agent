@@ -1,0 +1,21 @@
+<roundcube:include file="includes/layout.html" />
+
+<h1 class="voice"><roundcube:label name="ai_agent.agent" /></h1>
+
+<!-- chat in a window over the mail ("AI write", "AI reply"): no conversation list -->
+<div id="layout-content" class="selected ai-agent-frame" role="main">
+	<div id="aiagent-messages" class="scroller ai-agent-messages" aria-live="polite"></div>
+	<div class="ai-agent-footer">
+		<form id="aiagent-form" autocomplete="off">
+			<div class="input-group">
+				<textarea id="aiagent-input" class="form-control" rows="3"></textarea>
+				<span class="input-group-append">
+					<button type="submit" id="aiagent-send" class="btn btn-primary"></button>
+				</span>
+			</div>
+			<div id="aiagent-status" class="hint"></div>
+		</form>
+	</div>
+</div>
+
+<roundcube:include file="includes/footer.html" />

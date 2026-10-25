@@ -32,6 +32,13 @@ class ai_agent extends rcube_plugin
         'summary_weekly' => ['type_summary_weekly', 'ai_enable_summary_weekly'],
     ];
 
+    /** task types run from the webmail, without a switch: general writing instructions => label */
+    private const STYLE_TYPES = [
+        'reply' => 'type_reply',
+        'create' => 'type_create',
+        'spellcheck' => 'type_spellcheck',
+    ];
+
     /** tasks per page in the log */
     private const LOG_LIMIT = 500;
 
@@ -59,7 +66,12 @@ class ai_agent extends rcube_plugin
         $this->register_task('aiagent');
         $this->register_action('index', [$this, 'action_chat']);
         $this->register_action('plugin.ai_agent-check', [$this, 'action_check']);
+        $this->register_action('plugin.ai_agent-draft', [$this, 'action_draft']);
 
+        if ($this->rc->task == 'mail') {
+            $this->add_hook('message_compose', [$this, 'message_compose']);
+            $this->add_hook('message_compose_body', [$this, 'message_compose_body']);
+        }
         $this->add_hook('startup', [$this, 'startup']);
         $this->add_hook('session_destroy', [$this, 'session_destroy']);
     }
@@ -67,7 +79,7 @@ class ai_agent extends rcube_plugin
     /* Main menu button (at the end, where Roundcube puts it). */
     public function startup($args)
     {
-        if (!$this->rc->output->framed) {
+        if (!$this->framed()) {
             $this->add_button([
                 'command' => 'aiagent',
                 'class' => 'button-aiagent',
@@ -79,7 +91,32 @@ class ai_agent extends rcube_plugin
         }
         $this->include_stylesheet($this->local_skin_path() . '/ai_agent.css');
 
+        // "AI write" and "AI reply" in the mail toolbar (list and message view)
+        if ($this->rc->task == 'mail' && !$this->framed()
+            && in_array($this->rc->action, ['', 'index', 'show'], true)
+        ) {
+            $this->add_texts('localization/', ['ai_write', 'ai_reply', 'ai_write_title', 'ai_reply_title']);
+            foreach (['write' => 'ai-write', 'reply' => 'ai-reply'] as $what => $class) {
+                $this->add_button([
+                    'command' => 'plugin.ai_agent-' . $what,
+                    'type' => 'link',
+                    'class' => "button {$class} disabled",
+                    'classact' => "button {$class}",
+                    'label' => 'ai_agent.ai_' . $what,
+                    'title' => 'ai_agent.ai_' . $what . '_title',
+                    'innerclass' => 'inner',
+                ], 'toolbar');
+            }
+            $this->include_script('mail.js');
+        }
+
         return $args;
+    }
+
+    /* A page in a frame (_framed)? Roundcube sets output->framed only later, the env right away. */
+    private function framed(): bool
+    {
+        return !empty($this->rc->output->get_env('framed'));
     }
 
     /* Logging out of Roundcube ends the API session too. */
@@ -289,6 +326,20 @@ class ai_agent extends rcube_plugin
             return;
         }
 
+        // In a window over the mail ("AI write", "AI reply"): the chat alone, of type create or reply.
+        $mode = (string) rcube_utils::get_input_string('_ai_type', rcube_utils::INPUT_GET);
+        $ref = null;
+        if (!$this->framed() || !in_array($mode, ['create', 'reply'], true)) {
+            $mode = 'live';
+        } elseif ($mode == 'reply') {
+            $ref = $this->message_info((string) rcube_utils::get_input_string('_mbox', rcube_utils::INPUT_GET, true),
+                (int) rcube_utils::get_input_string('_uid', rcube_utils::INPUT_GET));
+            if ($ref['error'] !== '') {
+                $this->send_notice($this->gettext('agent'), 'error', rcube::Q($ref['error']));
+                return;
+            }
+        }
+
         $this->add_texts('localization/', true);
         $this->include_script('js/marked.min.js');
         $this->include_script('js/purify.min.js');
@@ -298,20 +349,19 @@ class ai_agent extends rcube_plugin
             'chat' => $this->chat_url(),
             'model' => (string) $this->rc->config->get('ai_agent_model', 'mail-ai'),
             'token' => $_SESSION['ai_agent_token'] ?? '',
+            'mode' => $mode,
+            'ref' => $ref,
         ]);
-        $this->rc->output->send('ai_agent.chat');
+        $this->rc->output->send($mode == 'live' ? 'ai_agent.chat' : 'ai_agent.chatframe');
     }
 
-    /* Ajax from the chat before a tool opens a message: does it exist? The
-       agent names folders in UTF-8, Roundcube in UTF7-IMAP; both are tried.
-       The error goes back to the model as the tool result, hence English. */
-    public function action_check()
+    /* A message by folder (UTF-8 from the agent, or UTF7-IMAP from Roundcube)
+       and UID. Returns [mbox (UTF7-IMAP), folder, uid, subject, error]; the
+       error goes back to the model as a tool result, hence English. */
+    private function message_info(string $folder, int $uid): array
     {
-        $id = (string) rcube_utils::get_input_string('_id', rcube_utils::INPUT_POST);
-        $folder = (string) rcube_utils::get_input_string('_mbox', rcube_utils::INPUT_POST, true);
-        $uid = (int) rcube_utils::get_input_string('_uid', rcube_utils::INPUT_POST);
         $storage = $this->rc->get_storage();
-        $res = ['id' => $id, 'error' => '', 'mbox' => '', 'subject' => ''];
+        $res = ['mbox' => '', 'folder' => $folder, 'uid' => $uid, 'subject' => '', 'error' => ''];
 
         $mbox = null;
         foreach (array_unique([rcube_charset::convert($folder, 'UTF-8', 'UTF7-IMAP'), $folder]) as $name) {
@@ -328,11 +378,100 @@ class ai_agent extends rcube_plugin
             $res['error'] = "message $uid does not exist in folder \"$folder\" (moved or deleted?)";
         } else {
             $res['mbox'] = $mbox;
+            $res['folder'] = rcube_charset::convert($mbox, 'UTF7-IMAP');
             $res['subject'] = rcube_mime::decode_header((string) $h->subject, $h->charset);
+        }
+
+        return $res;
+    }
+
+    /* Ajax from the chat before a tool opens a message: does it exist? */
+    public function action_check()
+    {
+        $res = $this->message_info((string) rcube_utils::get_input_string('_mbox', rcube_utils::INPUT_POST, true),
+            (int) rcube_utils::get_input_string('_uid', rcube_utils::INPUT_POST));
+        $res['id'] = (string) rcube_utils::get_input_string('_id', rcube_utils::INPUT_POST);
+        $this->rc->output->command('plugin.ai_agent-checked', $res);
+        $this->rc->output->send();
+    }
+
+    /* Ajax from the chat: a draft for the compose editor (mail_create_with,
+       mail_reply_with). Kept in the session, the hooks below fill it into the
+       editor opened by the returned URL. Nothing is sent; no Bcc. */
+    public function action_draft()
+    {
+        $in = static fn ($name) => (string) rcube_utils::get_input_string($name, rcube_utils::INPUT_POST, true);
+        $list = static function ($name) use ($in) {
+            $v = json_decode($in($name), true);
+            return is_array($v) ? implode(', ', array_filter(array_map('trim', array_filter($v, 'is_string')))) : '';
+        };
+        $res = ['id' => $in('_id'), 'error' => '', 'url' => ''];
+        $draft = ['to' => $list('_to'), 'cc' => $list('_cc'), 'subject' => trim($in('_subject')),
+            'body' => str_replace("\r\n", "\n", $in('_body'))];
+        $url = ['_task' => 'mail', '_action' => 'compose'];
+
+        if ($in('_kind') == 'reply') {
+            $msg = $this->message_info($in('_mbox'), (int) $in('_uid'));
+            $res['error'] = $msg['error'];
+            $url += ['_reply_uid' => $msg['uid'], '_mbox' => $msg['mbox']];
+        } elseif ($draft['to'] === '') {
+            $res['error'] = 'to is required';
+        }
+        if ($res['error'] === '') {
+            $drafts = array_slice($_SESSION['ai_agent_drafts'] ?? [], -9, null, true);   // the last ten are enough
+            $did = bin2hex(random_bytes(8));
+            $drafts[$did] = $draft;
+            $_SESSION['ai_agent_drafts'] = $drafts;
+            $res['url'] = $this->rc->url($url + ['_ai_draft' => $did]);
         }
 
         $this->rc->output->command('plugin.ai_agent-checked', $res);
         $this->rc->output->send();
+    }
+
+    /* Compose opened with _ai_draft: recipients and subject go to the compose
+       parameters (they take precedence over the reply defaults), the body is
+       kept for message_compose_body under the compose ID. */
+    public function message_compose($args)
+    {
+        $did = (string) ($args['param']['ai_draft'] ?? '');
+        $draft = $_SESSION['ai_agent_drafts'][$did] ?? null;
+        if ($draft) {
+            foreach (['to', 'cc', 'subject'] as $f) {
+                if ($draft[$f] !== '') {
+                    $args['param'][$f] = $draft[$f];
+                }
+            }
+            $_SESSION['ai_agent_compose'][$args['id']] = $draft['body'];
+            unset($_SESSION['ai_agent_drafts'][$did]);
+        }
+
+        return $args;
+    }
+
+    /* The draft's text into the editor: for a new message the whole body, for
+       a reply above or below the quote according to reply_mode. */
+    public function message_compose_body($args)
+    {
+        $cid = (string) rcube_utils::get_input_string('_id', rcube_utils::INPUT_GET);
+        if (!isset($_SESSION['ai_agent_compose'][$cid])) {
+            return $args;
+        }
+        $text = $_SESSION['ai_agent_compose'][$cid];
+        unset($_SESSION['ai_agent_compose'][$cid]);
+        if (trim($text) === '') {
+            return $args;
+        }
+
+        $add = $args['html'] ? '<div>' . nl2br(rcube::Q($text, 'strict', false)) . '</div><br>' : $text . "\n\n";
+        $body = (string) $args['body'];
+        if ($args['mode'] == rcmail_sendmail::MODE_REPLY && trim($body) !== '' && (int) $this->rc->config->get('reply_mode') != 1) {
+            $args['body'] = $body . ($args['html'] ? '' : "\n") . $add;    // below the quote (bottom posting)
+        } else {
+            $args['body'] = $add . $body;
+        }
+
+        return $args;
     }
 
     private function text_notpaid(array $box): string
@@ -380,6 +519,12 @@ class ai_agent extends rcube_plugin
                 // unchanged default instructions are not stored — empty = the default applies
                 $txt = $norm($in("_ai_{$t}_instructions"));
                 $p["ai_{$t}_instructions"] = $txt === $norm($ai['instructions'][$t]['default'] ?? '') ? '' : $txt;
+            }
+            foreach (self::STYLE_TYPES as $t => $_) {
+                if (isset($ai['instructions'][$t])) {          // only what the API offers
+                    $txt = $norm($in("_ai_{$t}_instructions"));
+                    $p["ai_{$t}_instructions"] = $txt === $norm($ai['instructions'][$t]['default'] ?? '') ? '' : $txt;
+                }
             }
             $p['ai_memory'] = str_replace("\r\n", "\n", $in('_ai_memory'));
         }
@@ -439,6 +584,17 @@ class ai_agent extends rcube_plugin
                     ->show(!empty($ai[substr($sw, 3)]) ? '1' : '')
                 . (new html_textarea(['name' => "_ai_{$type}_instructions", 'rows' => 5, 'disabled' => !$domAi,
                     'placeholder' => $this->gettext('default_task')]))->show($val));
+        }
+        foreach (self::STYLE_TYPES as $type => $label) {
+            if (!isset($ai['instructions'][$type])) {
+                continue;
+            }
+            $id = 'ai-agent-' . $type;
+            $val = (string) ($ai['instructions'][$type]['value'] ?? '') ?: (string) ($ai['instructions'][$type]['default'] ?? '');
+            $t->add('title', html::label($id, rcube::Q($this->gettext($label))));
+            $t->add(null, (new html_textarea(['name' => "_ai_{$type}_instructions", 'id' => $id, 'rows' => 3, 'disabled' => !$domAi,
+                    'placeholder' => $this->gettext('default_task')]))->show($val)
+                . html::div('hint', rcube::Q($this->gettext($label . '_hint'))));
         }
         $t->add('title', '');
         $t->add(null, html::div('hint', rcube::Q($this->gettext('default_hint'))));

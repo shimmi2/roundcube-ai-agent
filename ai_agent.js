@@ -34,7 +34,9 @@ window.rcmail && rcmail.addEventListener('init', function () {
     var byId = function (id) { return document.getElementById(id); };
     var box = byId('aiagent-messages'), form = byId('aiagent-form'), input = byId('aiagent-input'),
         send = byId('aiagent-send'), status = byId('aiagent-status'), list = byId('aiagent-list'), title = byId('aiagent-title');
-    var S = { conv: '', turns: [], busy: false, ctrl: null, timer: null, ro: false, stop: false, rounds: 0 };
+    // type = X-Chat-Type of the conversation; compose = editor URL from a draft tool, opened after the answer
+    var S = { conv: '', turns: [], busy: false, ctrl: null, timer: null, ro: false, stop: false, rounds: 0,
+        type: cfg.mode || 'live', compose: '' };
     var MAX_ROUNDS = 5;     // tool rounds per question, then stop (protection against a loop)
 
     var L = function (name, vars) {
@@ -126,6 +128,45 @@ window.rcmail && rcmail.addEventListener('init', function () {
             run: openMessage,
             label: function (a) { return L('tool_open', { msg: a.folder + ' / ' + a.uid }); },
             reopen: true
+        },
+        mail_create_with: {
+            description: 'Opens the compose editor with a new message prefilled for the user. Sends nothing, '
+                + 'sending is up to the user. Returns OK, or the error.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    to: { type: 'array', items: { type: 'string' }, description: 'Recipients, each "address" or "Name <address>".' },
+                    cc: { type: 'array', items: { type: 'string' }, description: 'Copy recipients, same form as to.' },
+                    subject: { type: 'string', description: 'Subject.' },
+                    body: { type: 'string', description: 'Text of the message (plain text).' }
+                },
+                required: ['to', 'subject', 'body'],
+                additionalProperties: false
+            },
+            run: function (a) { return draft('create', a); },
+            label: function (a) { return L('tool_create', { to: [].concat(a.to || []).join(', ') }); },
+            reopen: true
+        },
+        mail_reply_with: {
+            description: 'Opens the compose editor with a reply to a message (folder + UID). to, cc and subject are '
+                + 'optional, without them the usual reply values apply; the quote of the original is added by the '
+                + 'editor. Sends nothing. Returns OK, or the error.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    folder: { type: 'string', description: 'Folder of the message replied to, e.g. INBOX.' },
+                    uid: { type: 'integer', description: 'UID of the message in the folder.' },
+                    to: { type: 'array', items: { type: 'string' }, description: 'Recipients, only if they differ from the usual reply.' },
+                    cc: { type: 'array', items: { type: 'string' }, description: 'Copy recipients.' },
+                    subject: { type: 'string', description: 'Subject, only if it differs from "Re: …".' },
+                    body: { type: 'string', description: 'Text of the reply without the quote (plain text).' }
+                },
+                required: ['folder', 'uid', 'body'],
+                additionalProperties: false
+            },
+            run: function (a) { return draft('reply', a); },
+            label: function (a) { return L('tool_reply', { msg: a.folder + ' / ' + a.uid }); },
+            reopen: true
         }
     };
 
@@ -146,31 +187,53 @@ window.rcmail && rcmail.addEventListener('init', function () {
         return t.run(a).catch(function (e) { return 'ERROR: ' + ((e && e.message) || e); });
     }
 
-    /* Does the message exist? Asks the plugin (Roundcube's IMAP). */
-    var checks = {};
+    /* An ajax action of the plugin (Roundcube's IMAP, session); the answer comes as plugin.ai_agent-checked. */
+    var pending = {};
     rcmail.addEventListener('plugin.ai_agent-checked', function (d) {
-        var f = d && checks[d.id];
-        if (f) { delete checks[d.id]; f(d); }
+        var f = d && pending[d.id];
+        if (f) { delete pending[d.id]; f(d); }
     });
-    function checkMessage(folder, uid) {
+    function plugin(action, params) {
         return new Promise(function (resolve) {
             var id = 'c' + Date.now() + Math.random().toString(36).slice(2, 6);
-            checks[id] = resolve;
+            pending[id] = resolve;
             setTimeout(function () {
-                if (checks[id]) { delete checks[id]; resolve({ error: 'webmail did not answer the message check' }); }
+                if (pending[id]) { delete pending[id]; resolve({ error: 'webmail did not answer' }); }
             }, 20000);
-            rcmail.http_post('plugin.ai_agent-check', { _id: id, _mbox: folder, _uid: uid });
+            rcmail.http_post(action, $.extend({ _id: id }, params));
         });
     }
 
     function openMessage(a) {
         var uid = parseInt(a.uid, 10), folder = String(a.folder || '');
         if (!folder || !(uid > 0)) return Promise.resolve('ERROR: folder and uid are required');
-        return checkMessage(folder, uid).then(function (d) {
+        return plugin('plugin.ai_agent-check', { _mbox: folder, _uid: uid }).then(function (d) {
             if (d.error) return 'ERROR: ' + d.error;
             showMessage(d.mbox, uid, d.subject);
             return 'OK';
         });
+    }
+
+    /* A draft for the editor: the plugin keeps it in the session and returns
+       the compose URL; the page switches there after the model's answer. */
+    function draft(kind, a) {
+        if (kind == 'reply' && !(parseInt(a.uid, 10) > 0 && a.folder)) return Promise.resolve('ERROR: folder and uid are required');
+        return plugin('plugin.ai_agent-draft', {
+            _kind: kind, _mbox: String(a.folder || ''), _uid: parseInt(a.uid, 10) || 0,
+            _to: JSON.stringify([].concat(a.to || [])), _cc: JSON.stringify([].concat(a.cc || [])),
+            _subject: String(a.subject || ''), _body: String(a.body || '')
+        }).then(function (d) {
+            if (d.error) return 'ERROR: ' + d.error;
+            S.compose = d.url;
+            return 'OK';
+        });
+    }
+
+    /* To the editor — the whole page (from the window over the mail, its parent). */
+    function goCompose() {
+        var url = S.compose;
+        S.compose = '';
+        if (url) (window.parent !== window ? window.parent : window).location.href = url;
     }
 
     /* The message in a window over the chat — the conversation goes on.
@@ -193,7 +256,10 @@ window.rcmail && rcmail.addEventListener('init', function () {
         if (t && t.reopen && res === 'OK') {
             var link = el('a', '', text);
             link.href = '#';
-            link.addEventListener('click', function (ev) { ev.preventDefault(); t.run(a); });
+            link.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                if (!S.busy) t.run(a).then(function (r) { if (r === 'OK') goCompose(); else status.textContent = r; });
+            });
             d.appendChild(link);
         } else {
             d.appendChild(el('span', '', text));
@@ -218,7 +284,8 @@ window.rcmail && rcmail.addEventListener('init', function () {
 
     function renderAll(note) {
         box.innerHTML = '';
-        if (!S.turns.length) box.appendChild(el('div', 'ai-agent-intro', note || L('intro')));
+        if (!S.turns.length) box.appendChild(el('div', 'ai-agent-intro', note || L(S.type == 'reply' || S.type == 'create' ? 'intro_' + S.type : 'intro')));
+        if (!S.turns.length && cfg.ref) box.appendChild(el('div', 'ai-agent-ref', L('reply_to', { subject: cfg.ref.subject || '—' })));
         var results = {};
         S.turns.forEach(function (t) { if (t.role === 'tool') results[t.tool_call_id] = t.content; });
         S.turns.forEach(function (t) {
@@ -230,7 +297,7 @@ window.rcmail && rcmail.addEventListener('init', function () {
     }
 
     function setTitle(text) {
-        title.textContent = text;
+        if (title) title.textContent = text;          // the window over the mail has no header
     }
 
     /* Older conversations (without stored history) are read-only — the API would refuse to continue them. */
@@ -266,7 +333,8 @@ window.rcmail && rcmail.addEventListener('init', function () {
 
     /* ---- conversation list ---------------------------------------- */
     function loadList() {
-        call(api + '?fn=ai_list_tasks&type=live&limit=50')
+        if (!list) return;                              // the window over the mail has no list
+        call(api + '?fn=ai_list_tasks&type=chat&limit=50')
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 list.innerHTML = '';
@@ -309,7 +377,7 @@ window.rcmail && rcmail.addEventListener('init', function () {
             .then(function (x) {
                 if (x[0] !== 200) { status.textContent = (x[1] && x[1].error) || L('conv_error'); return; }
                 var c = x[1].conversation;
-                S.conv = String(c.at_id); S.turns = c.turns || [];
+                S.conv = String(c.at_id); S.turns = c.turns || []; S.type = c.type || 'live';
                 setTitle(S.turns.length ? String(S.turns[0].content).slice(0, 60) : fmtTime(c.created));
                 setRo(!S.turns.length);
                 renderAll(S.turns.length ? '' : L('readonly_note'));
@@ -323,7 +391,7 @@ window.rcmail && rcmail.addEventListener('init', function () {
 
     function reset() {
         if (S.busy) return;
-        S.conv = ''; S.turns = [];
+        S.conv = ''; S.turns = []; S.type = cfg.mode || 'live'; S.compose = '';
         setRo(false);
         setTitle(L('newconv_title'));
         renderAll(); status.textContent = ''; input.focus();
@@ -340,6 +408,10 @@ window.rcmail && rcmail.addEventListener('init', function () {
     }
 
     function ask(text) {
+        // a reply from the window over the mail: the first turn names the message (the prompt's {{request}})
+        if (!S.turns.length && cfg.ref) {
+            text = L('reply_ref', { subject: cfg.ref.subject || '—', folder: cfg.ref.folder, uid: cfg.ref.uid }) + '\n\n' + text;
+        }
         S.turns.push({ role: 'user', content: text });
         if (S.turns.length === 1) { box.innerHTML = ''; setTitle(text.slice(0, 60)); }
         bubble('user', text, fmtTime());
@@ -354,6 +426,7 @@ window.rcmail && rcmail.addEventListener('init', function () {
         S.ctrl = new AbortController();
         var h = { 'Content-Type': 'application/json' };
         if (S.conv) h['X-Conversation-Id'] = S.conv;
+        h['X-Chat-Type'] = S.type;
         var answer = '', target = null, calls = [];
 
         call(chat + 'chat/completions', {
@@ -413,8 +486,9 @@ window.rcmail && rcmail.addEventListener('init', function () {
             answer = answer.trim();
             calls = calls.filter(Boolean);
             if (calls.length) { runCalls(answer, calls); return; }
-            if (answer === '') { fail(L('empty_answer')); return; }
+            if (answer === '' && !S.compose) { fail(L('empty_answer')); return; }
             S.turns.push({ role: 'assistant', content: answer });
+            if (S.compose) { setBusy(false, L('opening_editor')); goCompose(); return; }
             setBusy(false, '');
             loadList();
             input.focus();
