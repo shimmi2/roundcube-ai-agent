@@ -129,12 +129,20 @@ with the webmail closed, with a phone app, a desktop client or no client
 at all.
 
 ```
- Browser ── chat (SSE), tool calls and results ─────────────────────┐
-    │                                                               ▼
- Roundcube + ai_agent ── login, settings, log (server side) ──► Data API + chat API ──► agent ──► model
-                                                                                          │
-                                       mail server (delivery hook, IMAP) ◄────────────────┘
+ Browser
+┌──────────────────────┐  chat (SSE), tool calls   ┌──────────┐     ┌───────┐     ┌───────┐
+│                      │──────────────────────────►│ Chat API │────►│ agent │────►│ model │
+│ Roundcube + ai_agent │                           └──────────┘     └───┬───┘     └───────┘
+│                      │  login, settings, log     ┌──────────┐         │ ▲
+│                      │──────────────────────────►│ Data API │         ▼ │ delivery hook
+└──────────────────────┘                           └────┬─────┘     ┌───────────────┐
+                                                        ▼           │  mail server  │
+                                            SQL: access, settings,  │ (IMAP, SMTP)  │
+                                                 prompts, logs      └───────────────┘
 ```
+
+The chat goes from the plugin's script in the browser, the data API calls
+from the plugin on the Roundcube server.
 
 - **Login.** The plugin logs in to the API with the same username and
   password the user used for Roundcube (`do_login`). It gets a token that is
@@ -171,9 +179,12 @@ the mail system is **Exim and Dovecot** (sorting is started by a Dovecot
 hook at delivery), the agent is **Stanban Agent**, and the API is built on
 the [**Waggle**](https://github.com/shimmi2/waggle) framework, as is the
 admin portal where administrators enable AI for mailboxes and set the
-report schedule. The model is an open-weight LLM behind an
-OpenAI-compatible endpoint. Waggle and Stanban Agent are my own
-technologies, written for the AI era.
+report schedule. The model is currently **Qwen 3.8 27B**
+(`qwen/qwen3.8-27b`), an open-weight model. We use public inference
+services, [Hugging Face](https://huggingface.co) and
+[Nous Research](https://nousresearch.com), chosen by price and offer;
+switching the provider or the model is one line of configuration. Waggle
+and Stanban Agent are my own technologies, written for the AI era.
 
 ### Implementing your own backend
 
@@ -268,6 +279,10 @@ install and no CDN to load them from:
   format (`23. 10. 14:05`, `12 345`) and the server's time, not the user's
   locale and time zone.
 - Only the Elastic skin is supported.
+- We are still tuning the behaviour of the agent and its skills where the
+  model delays the answer: it sometimes takes extra turns and searches too
+  actively for context even for requests where an immediate answer would
+  do.
 - *Open in Mail* selects the message in the list only when it is on the
   first page of the folder.
 
