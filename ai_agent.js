@@ -167,11 +167,26 @@ window.rcmail && rcmail.addEventListener('init', function () {
             run: function (a) { return draft('reply', a); },
             label: function (a) { return L('tool_reply', { msg: a.folder + ' / ' + a.uid }); },
             reopen: true
+        },
+        mail_content_replace: {
+            description: 'Replaces the whole content of the open compose editor with the given text. '
+                + 'Keep the format of the original (HTML stays HTML). Returns OK, or the error.',
+            parameters: {
+                type: 'object',
+                properties: { body: { type: 'string', description: 'The whole new content of the editor.' } },
+                required: ['body'],
+                additionalProperties: false
+            },
+            run: replaceContent,
+            label: function () { return L('tool_replace'); }
         }
     };
 
+    /* The spell check works with the open editor only; elsewhere there is none. */
     function toolDefs() {
-        return Object.keys(TOOLS).map(function (n) {
+        return Object.keys(TOOLS).filter(function (n) {
+            return (n == 'mail_content_replace') == (S.type == 'spellcheck');
+        }).map(function (n) {
             return { type: 'function', function: { name: n, description: TOOLS[n].description, parameters: TOOLS[n].parameters } };
         });
     }
@@ -236,6 +251,20 @@ window.rcmail && rcmail.addEventListener('init', function () {
         if (url) (window.parent !== window ? window.parent : window).location.href = url;
     }
 
+    /* The compose editor of the page that opened this window (spell check). */
+    function editor() {
+        try { return window.parent !== window && window.parent.rcmail && window.parent.rcmail.editor; } catch (e) { return null; }
+    }
+
+    function replaceContent(a) {
+        var ed = editor();
+        if (!ed) return Promise.resolve('ERROR: no compose editor is open');
+        if (typeof a.body != 'string' || !a.body.trim()) return Promise.resolve('ERROR: body is empty');
+        if (S.original === undefined) S.original = ed.get_content({ refresh: false });
+        ed.set_content(a.body);
+        return Promise.resolve('OK');
+    }
+
     /* The message in a window over the chat — the conversation goes on.
        "Open in Mail" goes to the folder list with the message selected (index
        with _uid); Roundcube selects it only when it is on the first page. */
@@ -265,6 +294,17 @@ window.rcmail && rcmail.addEventListener('init', function () {
             d.appendChild(el('span', '', text));
         }
         if (failed) d.appendChild(el('span', 'error', ' — ' + res));
+        if (c.function.name == 'mail_content_replace' && res === 'OK' && S.original !== undefined) {
+            var back = el('a', '', L('revert'));
+            back.href = '#';
+            back.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                var ed = editor();
+                if (ed) { ed.set_content(S.original); status.textContent = L('reverted'); }
+            });
+            d.appendChild(document.createTextNode(' · '));
+            d.appendChild(back);
+        }
         box.appendChild(d);
         box.scrollTop = box.scrollHeight;
     }
@@ -284,7 +324,7 @@ window.rcmail && rcmail.addEventListener('init', function () {
 
     function renderAll(note) {
         box.innerHTML = '';
-        if (!S.turns.length) box.appendChild(el('div', 'ai-agent-intro', note || L(S.type == 'reply' || S.type == 'create' ? 'intro_' + S.type : 'intro')));
+        if (!S.turns.length) box.appendChild(el('div', 'ai-agent-intro', note || L(S.type != 'live' ? 'intro_' + S.type : 'intro')));
         if (!S.turns.length && cfg.ref) box.appendChild(el('div', 'ai-agent-ref', L('reply_to', { subject: cfg.ref.subject || '—' })));
         var results = {};
         S.turns.forEach(function (t) { if (t.role === 'tool') results[t.tool_call_id] = t.content; });
@@ -407,14 +447,14 @@ window.rcmail && rcmail.addEventListener('init', function () {
         box.scrollTop = box.scrollHeight;
     }
 
-    function ask(text) {
+    function ask(text, shown) {
         // a reply from the window over the mail: the first turn names the message (the prompt's {{request}})
         if (!S.turns.length && cfg.ref) {
             text = L('reply_ref', { subject: cfg.ref.subject || '—', folder: cfg.ref.folder, uid: cfg.ref.uid }) + '\n\n' + text;
         }
         S.turns.push({ role: 'user', content: text });
         if (S.turns.length === 1) { box.innerHTML = ''; setTitle(text.slice(0, 60)); }
-        bubble('user', text, fmtTime());
+        bubble('user', shown || text, fmtTime());
         setBusy(true, L('working'));
         S.stop = false;
         S.rounds = 0;
@@ -531,4 +571,11 @@ window.rcmail && rcmail.addEventListener('init', function () {
     renderAll();
     loadList();
     input.focus();
+
+    // the spell check starts by itself with the editor's content (the text version in the bubble)
+    if (S.type == 'spellcheck') {
+        var ed = editor(), content = ed ? ed.get_content({ refresh: false }) : '';
+        if (!content.trim()) status.textContent = L('editor_empty');
+        else ask(content, ed.is_html() ? ed.get_content({ refresh: false, format: 'text' }) : content);
+    }
 });

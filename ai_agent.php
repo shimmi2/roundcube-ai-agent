@@ -109,6 +109,20 @@ class ai_agent extends rcube_plugin
             }
             $this->include_script('mail.js');
         }
+        // "AI spell check" in the compose toolbar
+        if ($this->rc->task == 'mail' && $this->rc->action == 'compose' && !$this->framed()) {
+            $this->add_texts('localization/', ['ai_spellcheck_title']);
+            $this->add_button([
+                'command' => 'plugin.ai_agent-spellcheck',
+                'type' => 'link',
+                'class' => 'button ai-spellcheck',
+                'classact' => 'button ai-spellcheck',
+                'label' => 'ai_agent.ai_spellcheck',
+                'title' => 'ai_agent.ai_spellcheck_title',
+                'innerclass' => 'inner',
+            ], 'toolbar');
+            $this->include_script('mail.js');
+        }
 
         return $args;
     }
@@ -326,10 +340,10 @@ class ai_agent extends rcube_plugin
             return;
         }
 
-        // In a window over the mail ("AI write", "AI reply"): the chat alone, of type create or reply.
+        // In a window over the mail ("AI write", "AI reply", "AI spell check"): the chat alone, of that type.
         $mode = (string) rcube_utils::get_input_string('_ai_type', rcube_utils::INPUT_GET);
         $ref = null;
-        if (!$this->framed() || !in_array($mode, ['create', 'reply'], true)) {
+        if (!$this->framed() || !in_array($mode, ['create', 'reply', 'spellcheck'], true)) {
             $mode = 'live';
         } elseif ($mode == 'reply') {
             $ref = $this->message_info((string) rcube_utils::get_input_string('_mbox', rcube_utils::INPUT_GET, true),
