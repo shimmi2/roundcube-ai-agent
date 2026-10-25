@@ -58,6 +58,7 @@ class ai_agent extends rcube_plugin
 
         $this->register_task('aiagent');
         $this->register_action('index', [$this, 'action_chat']);
+        $this->register_action('plugin.ai_agent-check', [$this, 'action_check']);
 
         $this->add_hook('startup', [$this, 'startup']);
         $this->add_hook('session_destroy', [$this, 'session_destroy']);
@@ -299,6 +300,39 @@ class ai_agent extends rcube_plugin
             'token' => $_SESSION['ai_agent_token'] ?? '',
         ]);
         $this->rc->output->send('ai_agent.chat');
+    }
+
+    /* Ajax from the chat before a tool opens a message: does it exist? The
+       agent names folders in UTF-8, Roundcube in UTF7-IMAP; both are tried.
+       The error goes back to the model as the tool result, hence English. */
+    public function action_check()
+    {
+        $id = (string) rcube_utils::get_input_string('_id', rcube_utils::INPUT_POST);
+        $folder = (string) rcube_utils::get_input_string('_mbox', rcube_utils::INPUT_POST, true);
+        $uid = (int) rcube_utils::get_input_string('_uid', rcube_utils::INPUT_POST);
+        $storage = $this->rc->get_storage();
+        $res = ['id' => $id, 'error' => '', 'mbox' => '', 'subject' => ''];
+
+        $mbox = null;
+        foreach (array_unique([rcube_charset::convert($folder, 'UTF-8', 'UTF7-IMAP'), $folder]) as $name) {
+            if ($name !== '' && $storage->folder_exists($name)) {
+                $mbox = $name;
+                break;
+            }
+        }
+        if ($folder === '' || $uid <= 0) {
+            $res['error'] = 'folder and uid are required';
+        } elseif ($mbox === null) {
+            $res['error'] = "folder \"$folder\" does not exist";
+        } elseif (!($h = $storage->get_message_headers($uid, $mbox))) {
+            $res['error'] = "message $uid does not exist in folder \"$folder\" (moved or deleted?)";
+        } else {
+            $res['mbox'] = $mbox;
+            $res['subject'] = rcube_mime::decode_header((string) $h->subject, $h->charset);
+        }
+
+        $this->rc->output->command('plugin.ai_agent-checked', $res);
+        $this->rc->output->send();
     }
 
     private function text_notpaid(array $box): string

@@ -34,6 +34,9 @@
 .ai-agent-msg.user .text { background: #e1f3fc; white-space: pre-wrap; }
 .ai-agent-intro { color: #737677; padding: 1rem 0; }
 .ai-agent-error { margin: .5rem 0; }
+.ai-agent-action { margin: .25rem 0; font-size: .85rem; color: #737677; }
+.ai-agent-action::before { content: "\2197\00a0"; }
+.ai-agent-action.failed .error { color: #c44; }
 
 /* Markdown in the answer */
 .ai-agent-md > :first-child { margin-top: 0; }
@@ -60,5 +63,5 @@ html.dark-mode .ai-agent-footer { border-color: #3c4249; }
 html.dark-mode .ai-agent-msg .text { background: #2f353b; }
 html.dark-mode .ai-agent-msg.user .text { background: #1d3d4f; }
 html.dark-mode .ai-agent-md td, html.dark-mode .ai-agent-md th { border-color: #4b5259; }
-html.dark-mode .ai-agent-msg .meta, html.dark-mode .ai-agent-intro,
+html.dark-mode .ai-agent-msg .meta, html.dark-mode .ai-agent-intro, html.dark-mode .ai-agent-action,
 html.dark-mode .ai-agent-list li.empty, html.dark-mode .ai-agent-log .result { color: #a3a7ab; }

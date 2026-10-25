@@ -14,6 +14,12 @@
  *  working, reading mail), the answer comes at the end in chunks. Hence
  *  the indicator with elapsed time. The agent's answer is Markdown
  *  containing text of foreign mail — always through DOMPurify.
+ *
+ *  Tools (TOOLS below) are executed here, in the browser: the request
+ *  carries their definitions in "tools", the backend offers them to the
+ *  model but does not run them, and a call comes back as tool_calls. The
+ *  plugin runs it and sends the result ("OK" or the error) as a "tool"
+ *  message in the next request; the model then answers or calls again.
  * ===================================================================== */
 window.rcmail && rcmail.addEventListener('init', function () {
     'use strict';
@@ -28,7 +34,8 @@ window.rcmail && rcmail.addEventListener('init', function () {
     var byId = function (id) { return document.getElementById(id); };
     var box = byId('aiagent-messages'), form = byId('aiagent-form'), input = byId('aiagent-input'),
         send = byId('aiagent-send'), status = byId('aiagent-status'), list = byId('aiagent-list'), title = byId('aiagent-title');
-    var S = { conv: '', turns: [], busy: false, ctrl: null, timer: null, ro: false };
+    var S = { conv: '', turns: [], busy: false, ctrl: null, timer: null, ro: false, stop: false, rounds: 0 };
+    var MAX_ROUNDS = 5;     // tool rounds per question, then stop (protection against a loop)
 
     var L = function (name, vars) {
         var s = rcmail.gettext(name, 'ai_agent');
@@ -99,6 +106,100 @@ window.rcmail && rcmail.addEventListener('init', function () {
         });
     }
 
+    /* ---- tools ---------------------------------------------------- */
+    /* name => definition for the model, run(args) → Promise of "OK" or
+       "ERROR: …", label(args) for the action line in the chat; reopen =
+       the line is a link that runs the tool again. */
+    var TOOLS = {
+        mail_open_gui: {
+            description: 'Opens a message for the user in the webmail, in a window over the chat. '
+                + 'Returns OK, or the error.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    folder: { type: 'string', description: 'Folder of the message, e.g. INBOX.' },
+                    uid: { type: 'integer', description: 'UID of the message in the folder.' }
+                },
+                required: ['folder', 'uid'],
+                additionalProperties: false
+            },
+            run: openMessage,
+            label: function (a) { return L('tool_open', { msg: a.folder + ' / ' + a.uid }); },
+            reopen: true
+        }
+    };
+
+    function toolDefs() {
+        return Object.keys(TOOLS).map(function (n) {
+            return { type: 'function', function: { name: n, description: TOOLS[n].description, parameters: TOOLS[n].parameters } };
+        });
+    }
+
+    function callArgs(c) {
+        try { var a = JSON.parse(c.function.arguments || '{}'); return a && typeof a === 'object' ? a : {}; } catch (e) { return null; }
+    }
+
+    function runTool(c) {
+        var t = TOOLS[c.function.name], a = callArgs(c);
+        if (!t) return Promise.resolve('ERROR: unknown tool ' + c.function.name);
+        if (a === null) return Promise.resolve('ERROR: arguments are not valid JSON');
+        return t.run(a).catch(function (e) { return 'ERROR: ' + ((e && e.message) || e); });
+    }
+
+    /* Does the message exist? Asks the plugin (Roundcube's IMAP). */
+    var checks = {};
+    rcmail.addEventListener('plugin.ai_agent-checked', function (d) {
+        var f = d && checks[d.id];
+        if (f) { delete checks[d.id]; f(d); }
+    });
+    function checkMessage(folder, uid) {
+        return new Promise(function (resolve) {
+            var id = 'c' + Date.now() + Math.random().toString(36).slice(2, 6);
+            checks[id] = resolve;
+            setTimeout(function () {
+                if (checks[id]) { delete checks[id]; resolve({ error: 'webmail did not answer the message check' }); }
+            }, 20000);
+            rcmail.http_post('plugin.ai_agent-check', { _id: id, _mbox: folder, _uid: uid });
+        });
+    }
+
+    function openMessage(a) {
+        var uid = parseInt(a.uid, 10), folder = String(a.folder || '');
+        if (!folder || !(uid > 0)) return Promise.resolve('ERROR: folder and uid are required');
+        return checkMessage(folder, uid).then(function (d) {
+            if (d.error) return 'ERROR: ' + d.error;
+            showMessage(d.mbox, uid, d.subject);
+            return 'OK';
+        });
+    }
+
+    /* The message in a window over the chat — the conversation goes on. */
+    function showMessage(mbox, uid, subject) {
+        var q = { _mbox: mbox, _uid: uid };
+        var frame = $('<iframe>').attr({ src: rcmail.url('mail/preview', $.extend({ _framed: 1 }, q)), frameborder: 0 });
+        rcmail.show_popup_dialog(frame, subject || L('message'), [
+            { text: L('open_in_mail'), 'class': 'mainaction', click: function () { location.href = rcmail.url('mail/show', q); } },
+            { text: rcmail.gettext('close'), click: function () { $(this).dialog('close'); } }
+        ], { width: 900, height: 700 });
+    }
+
+    /* A line in the chat for a tool call and its result. */
+    function action(c, res) {
+        var t = TOOLS[c.function.name], a = callArgs(c) || {}, failed = res && res !== 'OK';
+        var d = el('div', 'ai-agent-action' + (failed ? ' failed' : '')), text = t ? t.label(a) : c.function.name;
+        if (t && t.reopen && res === 'OK') {
+            var link = el('a', '', text);
+            link.href = '#';
+            link.addEventListener('click', function (ev) { ev.preventDefault(); t.run(a); });
+            d.appendChild(link);
+        } else {
+            d.appendChild(el('span', '', text));
+        }
+        if (failed) d.appendChild(el('span', 'error', ' — ' + res));
+        box.appendChild(d);
+        box.scrollTop = box.scrollHeight;
+    }
+
     /* ---- rendering ------------------------------------------------ */
     function bubble(role, content, when) {
         var me = role === 'user';
@@ -115,7 +216,14 @@ window.rcmail && rcmail.addEventListener('init', function () {
     function renderAll(note) {
         box.innerHTML = '';
         if (!S.turns.length) box.appendChild(el('div', 'ai-agent-intro', note || L('intro')));
-        S.turns.forEach(function (t) { bubble(t.role, t.content, ''); });
+        var results = {};
+        S.turns.forEach(function (t) { if (t.role === 'tool') results[t.tool_call_id] = t.content; });
+        S.turns.forEach(function (t) {
+            if (t.role === 'tool') return;
+            var text = String(t.content || '').trim();
+            if (text) bubble(t.role, text, '');
+            (t.tool_calls || []).forEach(function (c) { action(c, results[c.id] || ''); });
+        });
     }
 
     function setTitle(text) {
@@ -221,7 +329,8 @@ window.rcmail && rcmail.addEventListener('init', function () {
 
     /* ---- sending and the stream ----------------------------------- */
     function fail(msg, keepTurn) {
-        if (!keepTurn) S.turns.pop();               // an unanswered question does not belong to the history
+        // an unanswered question does not belong to the history (tool results stay — the server fills in the rest)
+        if (!keepTurn && S.turns.length && S.turns[S.turns.length - 1].role === 'user') S.turns.pop();
         setBusy(false, '');
         box.appendChild(el('div', 'boxerror ai-agent-error', msg));
         box.scrollTop = box.scrollHeight;
@@ -232,14 +341,21 @@ window.rcmail && rcmail.addEventListener('init', function () {
         if (S.turns.length === 1) { box.innerHTML = ''; setTitle(text.slice(0, 60)); }
         bubble('user', text, fmtTime());
         setBusy(true, L('working'));
+        S.stop = false;
+        S.rounds = 0;
+        request();
+    }
+
+    /* One request to the chat; after tool calls it runs the tools and sends the next one. */
+    function request() {
         S.ctrl = new AbortController();
         var h = { 'Content-Type': 'application/json' };
         if (S.conv) h['X-Conversation-Id'] = S.conv;
-        var answer = '', target = null;
+        var answer = '', target = null, calls = [];
 
         call(chat + 'chat/completions', {
             method: 'POST', headers: h, signal: S.ctrl.signal,
-            body: JSON.stringify({ model: cfg.model, stream: true, messages: S.turns })
+            body: JSON.stringify({ model: cfg.model, stream: true, messages: S.turns, tools: toolDefs() })
         }).then(function (r) {
             var cid = r.headers.get('X-Conversation-Id');
             if (cid) S.conv = cid;
@@ -273,16 +389,27 @@ window.rcmail && rcmail.addEventListener('init', function () {
             var d; try { d = JSON.parse(p); } catch (e) { return; }
             if (d.error) { fail(d.error.message || L('no_answer')); answer = null; return; }
             if (d.conversation_id) S.conv = String(d.conversation_id);
-            var c = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content;
-            if (c && answer !== null) {
-                answer += c;
+            var delta = (d.choices && d.choices[0] && d.choices[0].delta) || {};
+            // tool calls may come in pieces (OpenAI): by index, arguments appended
+            (delta.tool_calls || []).forEach(function (tc) {
+                var t = calls[tc.index || 0] || (calls[tc.index || 0] = { id: '', type: 'function', function: { name: '', arguments: '' } });
+                if (tc.id) t.id = tc.id;
+                if (tc.function && tc.function.name) t.function.name = tc.function.name;
+                if (tc.function && tc.function.arguments) t.function.arguments += tc.function.arguments;
+            });
+            if (delta.content && answer !== null) {
+                answer += delta.content;
+                if (!target && !answer.trim()) return;      // some models start with empty lines
                 if (!target) target = bubble('assistant', '', fmtTime());
-                target.innerHTML = md(answer);
+                target.innerHTML = md(answer.trim());
                 box.scrollTop = box.scrollHeight;
             }
         }
         function finish() {
             if (answer === null) return;
+            answer = answer.trim();
+            calls = calls.filter(Boolean);
+            if (calls.length) { runCalls(answer, calls); return; }
             if (answer === '') { fail(L('empty_answer')); return; }
             S.turns.push({ role: 'assistant', content: answer });
             setBusy(false, '');
@@ -291,9 +418,26 @@ window.rcmail && rcmail.addEventListener('init', function () {
         }
     }
 
+    /* Tool calls of one answer: run them one by one, then ask the model again. */
+    function runCalls(answer, calls) {
+        S.turns.push({ role: 'assistant', content: answer, tool_calls: calls });
+        if (++S.rounds > MAX_ROUNDS) { fail(L('tool_rounds'), true); return; }
+        var p = Promise.resolve();
+        calls.forEach(function (c) {
+            p = p.then(function () { return runTool(c); }).then(function (res) {
+                S.turns.push({ role: 'tool', tool_call_id: c.id, content: res });
+                action(c, res);
+            });
+        });
+        p.then(function () {
+            if (S.stop) fail(L('stopped'), true);
+            else request();
+        });
+    }
+
     form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        if (S.busy) { if (S.ctrl) S.ctrl.abort(); return; }
+        if (S.busy) { S.stop = true; if (S.ctrl) S.ctrl.abort(); return; }
         if (S.ro) return;
         var text = input.value.trim();
         if (!text) return;
