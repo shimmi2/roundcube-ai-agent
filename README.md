@@ -135,14 +135,22 @@ at all.
 │ Roundcube + ai_agent │                           └──────────┘     └───┬───┘     └───────┘
 │                      │  login, settings, log     ┌──────────┐         │ ▲
 │                      │──────────────────────────►│ Data API │         ▼ │ delivery hook
-└──────────────────────┘                           └────┬─────┘     ┌───────────────┐
-                                                        ▼           │  mail server  │
-                                            SQL: access, settings,  │ (IMAP, SMTP)  │
-                                                 prompts, logs      └───────────────┘
+└──────────────────────┘                           └────┬─────┘     ┌─────────────┐
+                                                        ▼           │ mail server │
+                                                ┌──────────────┐    │ IMAP, SMTP  │
+                                                │ SQL: access, │◄───┤             │
+                                                │ settings,    │    └─────────────┘
+                                                │ prompts, logs│
+                                                └──────────────┘
+
+               ·  company admin board in the Waggle framework  ·
 ```
 
 The chat goes from the plugin's script in the browser, the data API calls
-from the plugin on the Roundcube server.
+from the plugin on the Roundcube server. All the data, the mail and the
+SQL, are in one place. The whole thing is part of a larger system with a
+company admin board built on Waggle, where administrators enable AI for
+mailboxes; it is not described here because it is not part of the plugin.
 
 - **Login.** The plugin logs in to the API with the same username and
   password the user used for Roundcube (`do_login`). It gets a token that is
@@ -188,8 +196,9 @@ and Stanban Agent are my own technologies, written for the AI era.
 
 ### Implementing your own backend
 
-The plugin is not tied to that backend. On the wire it is a combination
-of two simple things:
+The plugin is not tied to that backend, and in the time of agentic coding
+it is no problem to adapt it to the needs of an organization. On the wire
+it is a combination of two simple things:
 
 1. **The OpenAI Chat Completions API** (`/v1/chat/completions`, SSE
    streaming, standard `tools`) with two small additions: a server-side
@@ -219,7 +228,9 @@ The service labels (for example a paid service activated by an
 administrator) follow the SSHosting model. If your model differs, adjust
 them in `localization/`.
 
-If you are building a backend for the plugin, I am open to consultations
+If there is interest, I am willing to bring the agent to production
+quality and release it. If you are building a backend for the plugin, I
+am open to consultations
 on the implementation: [simek.info](https://simek.info).
 
 ## Installation
