@@ -230,8 +230,7 @@ them in `localization/`.
 
 If there is interest, I am willing to bring the agent to production
 quality and release it. If you are building a backend for the plugin, I
-am open to consultations
-on the implementation: [simek.info](https://simek.info).
+am open to consultations on the implementation: [simek.info](https://simek.info).
 
 ## Installation
 
