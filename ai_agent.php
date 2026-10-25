@@ -597,7 +597,8 @@ class ai_agent extends rcube_plugin
             $t->add(null, (new html_checkbox(['name' => "_{$sw}", 'id' => $id, 'value' => '1', 'disabled' => !$domAi]))
                     ->show(!empty($ai[substr($sw, 3)]) ? '1' : '')
                 . (new html_textarea(['name' => "_ai_{$type}_instructions", 'rows' => 5, 'disabled' => !$domAi,
-                    'placeholder' => $this->gettext('default_task')]))->show($val));
+                    'placeholder' => $this->gettext('default_task')]))->show($val)
+                . $this->schedule_hint($ai, $type));
         }
         foreach (self::STYLE_TYPES as $type => $label) {
             if (!isset($ai['instructions'][$type])) {
@@ -628,6 +629,24 @@ class ai_agent extends rcube_plugin
             rcube::Q($this->rc->gettext('save')));
 
         return [$form, $button];
+    }
+
+    /* When a summary last ran and runs next; empty for other types. */
+    private function schedule_hint(array $ai, string $type): string
+    {
+        if (!array_key_exists("{$type}_next_run", $ai)) {
+            return '';
+        }
+        $fmt = fn ($d) => rcube::Q($this->rc->format_date($d, 'D j. n. Y H:i'));
+        $parts = [];
+        if (!empty($ai['enable_' . $type])) {
+            $parts[] = rcube::Q($this->gettext('next_run')) . ': '
+                . ($ai["{$type}_next_run"] ? $fmt($ai["{$type}_next_run"]) : rcube::Q($this->gettext('next_run_soon')));
+        }
+        if (!empty($ai["{$type}_last_run"])) {
+            $parts[] = rcube::Q($this->gettext('last_run')) . ': ' . $fmt($ai["{$type}_last_run"]);
+        }
+        return $parts ? html::div('hint', implode(' · ', $parts)) : '';
     }
 
     /* Settings → AI log: tasks of this mailbox by month, token usage. */

@@ -43,6 +43,9 @@ $labels['type_create_hint'] = 'General instructions for new messages written wit
 $labels['type_spellcheck'] = 'AI spell check';
 $labels['type_spellcheck_hint'] = 'General instructions for the spell check in the editor.';
 $labels['default_task'] = 'default task';
+$labels['next_run'] = 'Next';
+$labels['next_run_soon'] = 'will be scheduled within minutes';
+$labels['last_run'] = 'last';
 $labels['default_hint'] = 'Deleted or unchanged text = default task.';
 $labels['memory'] = 'AI memory';
 $labels['memory_empty'] = 'Memory is empty.';

@@ -47,6 +47,9 @@ $labels['type_create_hint'] = 'Obecné pokyny pro nové zprávy psané tlačítk
 $labels['type_spellcheck'] = 'AI kontrola pravopisu';
 $labels['type_spellcheck_hint'] = 'Obecné pokyny ke kontrole pravopisu v editoru.';
 $labels['default_task'] = 'výchozí zadání';
+$labels['next_run'] = 'Příští';
+$labels['next_run_soon'] = 'naplánuje se během pár minut';
+$labels['last_run'] = 'poslední';
 $labels['default_hint'] = 'Smazaný nebo nezměněný text = výchozí zadání.';
 $labels['memory'] = 'Paměť AI';
 $labels['memory_empty'] = 'Paměť je prázdná.';
