@@ -173,12 +173,15 @@ window.rcmail && rcmail.addEventListener('init', function () {
         });
     }
 
-    /* The message in a window over the chat — the conversation goes on. */
+    /* The message in a window over the chat — the conversation goes on.
+       "Open in Mail" goes to the folder list with the message selected (index
+       with _uid); Roundcube selects it only when it is on the first page. */
     function showMessage(mbox, uid, subject) {
         var q = { _mbox: mbox, _uid: uid };
         var frame = $('<iframe>').attr({ src: rcmail.url('mail/preview', $.extend({ _framed: 1 }, q)), frameborder: 0 });
+        var inMail = rcmail.env.comm_path.replace(/_task=[a-z0-9_-]+/, '_task=mail') + '&' + $.param(q);
         rcmail.show_popup_dialog(frame, subject || L('message'), [
-            { text: L('open_in_mail'), 'class': 'mainaction', click: function () { location.href = rcmail.url('mail/show', q); } },
+            { text: L('open_in_mail'), 'class': 'mainaction', click: function () { location.href = inMail; } },
             { text: rcmail.gettext('close'), click: function () { $(this).dialog('close'); } }
         ], { width: 900, height: 700 });
     }
