@@ -1,13 +1,19 @@
 # AI agent plugin for Roundcube
 
 **A Roundcube plugin for an AI agent working over your mailbox: chat with
-it, give it instructions and see what it did, right inside Roundcube.**
+it, let it write and check your mail, give it instructions and see what it
+did, right inside Roundcube.**
 
 Ask *"what important came this week?"* or *"find the last invoice from my
 provider and summarize it"*. The agent searches and reads your mail and
-answers in Markdown. Besides the chat, users can switch on AI sorting of
-incoming mail and daily or weekly reports, write their own instructions
-for each agent, edit what the assistant remembers about them and see a
+answers in Markdown, and it can open the message it found for you. Click
+**AI write** or **AI reply**, say what you want, and the agent drafts the
+message and opens it in the compose editor. **AI spell check** in the
+editor corrects the text in place. Nothing is ever sent by the agent.
+
+Besides that, users can switch on AI sorting of incoming mail and daily
+or weekly reports, write their own instructions for each agent and their
+own writing style, edit what the assistant remembers about them and see a
 log of everything the AI did, including token usage.
 
 All the work happens **on the server**. Incoming mail is sorted when it
@@ -34,8 +40,9 @@ It is not tied to that backend, though. The design follows today's common
 patterns, and on the wire it is a combination of two simple things:
 
 1. **The OpenAI Chat Completions API** (`/v1/chat/completions`, SSE
-   streaming) with one small addition: a server-side session carried in the
-   `X-Conversation-Id` header.
+   streaming, standard `tools`) with two small additions: a server-side
+   session carried in the `X-Conversation-Id` header and the chat type in
+   `X-Chat-Type`.
 2. **A small REST-like data API**: one URL, the operation in `?fn=`,
    JSON responses and a Bearer token. Seven operations cover login and
    logout, mailbox settings, the task list, conversation history and usage
@@ -62,10 +69,24 @@ consultations on the implementation: [simek.info](https://simek.info).
   past conversations next to it, live streaming, a stop button and
   continuing older conversations. It uses the responsive layout of the
   Elastic skin.
+- **Messages in the chat.** When the agent talks about a message, it can
+  open it in a window over the chat; *Open in Mail* then shows it in the
+  folder list.
+- **AI write** and **AI reply** in the mail toolbar (reply needs one
+  selected message): a window asks what and how to write, the agent drafts
+  the message and the page switches to the compose editor with recipients,
+  subject and text filled in (a reply keeps the usual quote). The
+  conversation stays in the chat history.
+- **AI spell check** in the compose toolbar: the editor content is sent
+  by itself, the corrected text replaces it (HTML stays HTML, the
+  signature stays), with a summary of the changes and a *revert to the
+  original text* link. You can go on in the window, e.g. *"make it more
+  formal"*.
 - **Settings → AI → AI agent instructions**: switches for AI sorting of
-  incoming mail and for daily and weekly reports, custom instructions for
-  each agent (falling back to defaults) and the assistant's memory, which
-  the user can edit.
+  incoming mail and for daily and weekly reports with the next and last
+  run, custom instructions for each agent (falling back to defaults),
+  general style for AI reply, AI write and AI spell check, and the
+  assistant's memory, which the user can edit.
 - **Settings → AI → AI log**: every AI task by month with its state,
   folder, input and output tokens and result, plus monthly sums.
 - Clear notices for a mailbox or domain without the service: it is
@@ -94,6 +115,15 @@ consultations on the implementation: [simek.info](https://simek.info).
   can take minutes and is streamed. The API therefore has to send CORS
   headers. The token travels in a header and no cookies are used, so
   `Access-Control-Allow-Origin: *` is safe.
+- **Client tools.** Opening a message, filling the compose editor and
+  replacing its content happen in the browser, so the server cannot do
+  them. The plugin sends their definitions in the standard `tools` field;
+  the agent offers them to the model but does not run them, it returns
+  the calls (`finish_reason: tool_calls`). The plugin runs them, answers
+  `OK` or the error as `role: tool` messages and the model continues. At
+  most 5 tool rounds per question. Which tools a window offers depends on
+  where it is: the spell check gets only the editor replacement, the other
+  windows everything else. The tools never send anything.
 - **Answers are Markdown** that may quote foreign mail. They are rendered
   with [marked](https://github.com/markedjs/marked) and always sanitized
   with [DOMPurify](https://github.com/cure53/DOMPurify). Links open in a new
@@ -139,10 +169,10 @@ In short:
 | `do_login` / `do_logout` | POST | exchange mailbox credentials for a per-mailbox token / end it |
 | `mail_get_mailbox` | GET | mailbox info, AI switches, instructions with defaults, memory |
 | `mail_store_mailbox` | POST | store the fields the user may change |
-| `ai_list_tasks` | GET | tasks with state and tokens; `type=live` = chat conversations |
-| `ai_get_conversation` | GET | turns of one conversation |
+| `ai_list_tasks` | GET | tasks with state and tokens; `type=chat` = conversations to return to |
+| `ai_get_conversation` | GET | turns of one conversation, including tool calls and results |
 | `ai_usage_months` | GET | monthly task and token sums |
-| `chat/completions` | POST | OpenAI chat, SSE; session in `X-Conversation-Id` |
+| `chat/completions` | POST | OpenAI chat, SSE, client `tools`; session in `X-Conversation-Id`, type in `X-Chat-Type` |
 
 The service labels (for example a paid service activated by an
 administrator) follow the SSHosting model. If your model differs, adjust
@@ -168,6 +198,8 @@ install and no CDN to load them from:
 - Dates and numbers in the AI log use a fixed format (`23. 10. 14:05`,
   `12 345`), not the user's locale.
 - Only the Elastic skin is supported.
+- *Open in Mail* selects the message in the list only when it is on the
+  first page of the folder.
 
 ## License
 

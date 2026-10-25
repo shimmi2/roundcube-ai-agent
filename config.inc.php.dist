@@ -32,39 +32,53 @@
  *     ai.enable           AI enabled for the mailbox (set by the administrator,
  *                         read-only for the user)
  *     ai.enable_incoming, ai.enable_summary_daily, ai.enable_summary_weekly   0/1
- *     ai.instructions.<incoming|summary_daily|summary_weekly> = {value, default}
- *                         empty value = the default applies
+ *     ai.summary_daily_next_run, ai.summary_weekly_next_run
+ *                         "YYYY-MM-DD HH:MM:SS" or null — when the report runs
+ *                         next (set by the administrator, read-only here)
+ *     ai.summary_daily_last_run, ai.summary_weekly_last_run
+ *                         when the report last finished, or null
+ *     ai.instructions.<type> = {value, default}, empty value = the default
+ *                         applies. Types: incoming, summary_daily,
+ *                         summary_weekly (what the agent should do), and
+ *                         reply, create, spellcheck (general writing style
+ *                         for the buttons in the webmail). A type the API
+ *                         does not list is not shown in the settings.
  *     ai.memory           the assistant's memory (text)
  *  mail_store_mailbox  POST only the fields to store:
  *     fullname, ai_enable_incoming, ai_enable_summary_daily,
- *     ai_enable_summary_weekly (0/1), ai_incoming_instructions,
- *     ai_summary_daily_instructions, ai_summary_weekly_instructions
- *     (empty = default instructions), ai_memory
+ *     ai_enable_summary_weekly (0/1), ai_<type>_instructions for every
+ *     type above (empty = default instructions), ai_memory
  *     → {mailbox} after storing; a field the user may not change → 403
  *
- *  ai_list_tasks   GET type (live = chat conversations), limit, offset
+ *  ai_list_tasks   GET type, limit, offset
+ *                  type: a task type, or chat = conversations the user
+ *                  returns to (live, reply, create — not spellcheck)
  *                  → {total, tasks[]}: at_id, type, state (new, running, done,
  *                  skipped, error), created, started, finished, mailbox,
  *                  tokens_in, tokens_out, result (shortened), error;
- *                  for live also title (start of the first question)
- *  ai_get_conversation  GET at_id → {conversation: {at_id, state, created,
- *                  turns[]: {role: user|assistant, content}}}
+ *                  for chat types also title (start of the first question)
+ *  ai_get_conversation  GET at_id → {conversation: {at_id, type, state, created,
+ *                  turns[]}}; turns as in the chat: {role: user, content},
+ *                  {role: assistant, content, tool_calls?},
+ *                  {role: tool, tool_call_id, content}
  *  ai_usage_months GET months (1–120) → {months[]: {month: "YYYY-MM",
  *                  live, incoming, summary, total: {tasks, tokens_in, tokens_out}}}
  *                  (including deleted tasks)
  *
  *  Task types: incoming (sorting of a delivered message), summary_daily,
- *  summary_weekly (reports sent to the mailbox), live (chat). mailbox in a
- *  task is the IMAP folder the message was in.
+ *  summary_weekly (reports sent to the mailbox), live (chat), reply and
+ *  create ("AI reply" / "AI write"), spellcheck ("AI spell check" in the
+ *  editor). mailbox in a task is the IMAP folder the message was in.
+ *  Usage sums count reply, create and spellcheck under live.
  *
  * ---------------------------------------------------------------------------
  *  CHAT (ai_agent_chat_url) — OpenAI Chat Completions with a session
  * ---------------------------------------------------------------------------
- *  POST <chat>chat/completions, body {model, stream: true, messages[]},
+ *  POST <chat>chat/completions, body {model, stream: true, messages[], tools[]},
  *  token in the header Authorization: Bearer (the same as for the data API).
  *  The browser calls it directly, so the API has to allow CORS for the
  *  webmail origin (Access-Control-Allow-Origin; allowed headers
- *  Authorization, Content-Type, X-Conversation-Id; exposed headers
+ *  Authorization, Content-Type, X-Conversation-Id, X-Chat-Type; exposed headers
  *  X-Conversation-Id, Retry-After). The data API calls listed above for
  *  the chat (ai_list_tasks, ai_get_conversation) come from the browser too.
  *  The token travels in a header and no cookies are used, so
@@ -74,10 +88,38 @@
  *  returns the header X-Conversation-Id (and the field conversation_id in
  *  the chunks); the client sends it with the following requests and the
  *  server then takes only the last message from messages, it keeps the
- *  history itself. No header = a new conversation.
+ *  history itself (after tool calls: the trailing role:tool messages).
+ *  No header = a new conversation.
+ *
+ *  Chat type: header X-Chat-Type on the first request — live (default,
+ *  the chat page), reply, create, spellcheck. Each type has its own
+ *  prompt on the server; for reply, create and spellcheck the first user
+ *  message is the request and ai_<type>_instructions the style. A
+ *  following request of the conversation must send the same type or none.
+ *
+ *  Client tools (standard OpenAI "tools"): the plugin defines tools the
+ *  server cannot run itself, because they act in the user's browser. The
+ *  server offers them to the model next to its own tools but does not run
+ *  them: when the model calls only client tools, the answer ends with
+ *  finish_reason "tool_calls" and the calls (stream: delta.tool_calls with
+ *  index). The plugin runs them one by one and sends the results in the
+ *  next request as {role: tool, tool_call_id, content: "OK" | "ERROR: …"};
+ *  the model then continues. A call left without a result should be
+ *  answered by the server with an error, so the conversation can go on.
+ *  The server must only return calls of tools the client sent.
+ *    mail_open_gui {folder, uid}           show a message in a window
+ *    mail_create_with {to[], cc[]?, subject, body}
+ *                                          open the editor with a new message
+ *    mail_reply_with {folder, uid, to[]?, cc[]?, subject?, body}
+ *                                          open the editor with a reply
+ *    mail_content_replace {body}           replace the editor content
+ *                                          (spellcheck only; the others
+ *                                          everywhere else)
+ *  Nothing is ever sent by a tool; sending stays with the user. The full
+ *  definitions are in ai_agent.js (TOOLS).
  *  Stream (SSE): while the agent works only ": ping" comments arrive (it
  *  may take minutes), the answer comes at the end as delta.content in
- *  chunks, then "data: [DONE]". An error in the middle of the stream:
+ *  chunks (and tool_calls), then "data: [DONE]". An error in the middle of the stream:
  *  data: {"error": {"message"}}.
  *  Codes: 403 AI not enabled on the domain or mailbox, 409 the conversation
  *  is being answered right now, 429 + Retry-After the agent is busy.
